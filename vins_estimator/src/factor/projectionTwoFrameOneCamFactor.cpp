@@ -14,6 +14,17 @@
 Eigen::Matrix2d ProjectionTwoFrameOneCamFactor::sqrt_info;
 double ProjectionTwoFrameOneCamFactor::sum_t;
 
+
+/**
+ * 单目，两帧建立重投影误差
+ * 优化变量：前一帧位姿，当前帧位姿，相机与IMU外参，特征点逆深度，相机与IMU时差
+ * @param _pts_i        前一帧归一化相机点
+ * @param _pts_j        当前帧归一化相机点
+ * @param _velocity_i   前一帧速度（归一化相机平面）
+ * @param _velocity_j   当前帧速度（归一化相机平面）
+ * @param _td_i         前一帧相机与IMU时差
+ * @param _td_j         当前帧相机与IMU时差
+*/
 ProjectionTwoFrameOneCamFactor::ProjectionTwoFrameOneCamFactor(const Eigen::Vector3d &_pts_i, const Eigen::Vector3d &_pts_j, 
                                        const Eigen::Vector2d &_velocity_i, const Eigen::Vector2d &_velocity_j,
                                        const double _td_i, const double _td_j) : 

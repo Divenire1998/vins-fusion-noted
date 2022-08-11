@@ -53,6 +53,7 @@ int main(int argc, char** argv)
 	string dataPath = sequence + "/";
 
 	readParameters(config_file);
+	
 	estimator.setParameter();
 	registerPub(n);
 

@@ -1,8 +1,8 @@
 /*******************************************************
  * Copyright (C) 2019, Aerial Robotics Group, Hong Kong University of Science and Technology
- * 
+ *
  * This file is part of VINS.
- * 
+ *
  * Licensed under the GNU General Public License v3.0;
  * you may not use this file except in compliance with the License.
  *
@@ -43,26 +43,28 @@ void publish_car_model(double t, Eigen::Vector3d t_w_car, Eigen::Quaterniond q_w
 
     car_mesh.mesh_resource = "package://global_fusion/models/car.dae";
 
+    // 变换一下车子模型XYZ的方向
     Eigen::Matrix3d rot;
     rot << 0, 0, -1, 0, -1, 0, -1, 0, 0;
-    
     Eigen::Quaterniond Q;
-    Q = q_w_car * rot; 
-    car_mesh.pose.position.x    = t_w_car.x();
-    car_mesh.pose.position.y    = t_w_car.y();
-    car_mesh.pose.position.z    = t_w_car.z();
+    Q = q_w_car * rot;
+
+    //
+    car_mesh.pose.position.x = t_w_car.x();
+    car_mesh.pose.position.y = t_w_car.y();
+    car_mesh.pose.position.z = t_w_car.z();
     car_mesh.pose.orientation.w = Q.w();
     car_mesh.pose.orientation.x = Q.x();
     car_mesh.pose.orientation.y = Q.y();
     car_mesh.pose.orientation.z = Q.z();
 
-    car_mesh.color.a = 1.0;
-    car_mesh.color.r = 1.0;
-    car_mesh.color.g = 0.0;
+    // 透明度和颜色
+    car_mesh.color.a = 0.5;
+    car_mesh.color.r = 0.0;
+    car_mesh.color.g = 255.0;
     car_mesh.color.b = 0.0;
 
-    float major_scale = 2.0;
-
+    float major_scale = 5.0;
     car_mesh.scale.x = major_scale;
     car_mesh.scale.y = major_scale;
     car_mesh.scale.z = major_scale;
@@ -70,17 +72,23 @@ void publish_car_model(double t, Eigen::Vector3d t_w_car, Eigen::Quaterniond q_w
     pub_car.publish(markerArray_msg);
 }
 
+/**
+ * 订阅GPS数据
+ */
 void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg)
 {
-    //printf("gps_callback! \n");
+    // printf("gps_callback! \n");
     m_buf.lock();
     gpsQueue.push(GPS_msg);
     m_buf.unlock();
 }
 
+/**
+ * 订阅里程计
+ */
 void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 {
-    //printf("vio_callback! \n");
+    // printf("vio_callback! \n");
     double t = pose_msg->header.stamp.toSec();
     last_vio_t = t;
     Eigen::Vector3d vio_t(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
@@ -89,41 +97,49 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     vio_q.x() = pose_msg->pose.pose.orientation.x;
     vio_q.y() = pose_msg->pose.pose.orientation.y;
     vio_q.z() = pose_msg->pose.pose.orientation.z;
+    // 输入一帧里程计，转换到global系下
     globalEstimator.inputOdom(t, vio_t, vio_q);
 
-
     m_buf.lock();
-    while(!gpsQueue.empty())
+    while (!gpsQueue.empty())
     {
         sensor_msgs::NavSatFixConstPtr GPS_msg = gpsQueue.front();
         double gps_t = GPS_msg->header.stamp.toSec();
         printf("vio t: %f, gps t: %f \n", t, gps_t);
         // 10ms sync tolerance
-        if(gps_t >= t - 0.01 && gps_t <= t + 0.01)
+        // 当前时刻前后10ms内
+        // gps和vio的时间戳在10ms内，认为是同一个时刻
+        if (gps_t >= t - 0.01 && gps_t <= t + 0.01)
         {
-            //printf("receive GPS with timestamp %f\n", GPS_msg->header.stamp.toSec());
+            // printf("receive GPS with timestamp %f\n", GPS_msg->header.stamp.toSec());
+            // 经纬度、海拔
             double latitude = GPS_msg->latitude;
             double longitude = GPS_msg->longitude;
             double altitude = GPS_msg->altitude;
-            //int numSats = GPS_msg->status.service;
+            // int numSats = GPS_msg->status.service;
             double pos_accuracy = GPS_msg->position_covariance[0];
-            if(pos_accuracy <= 0)
+            if (pos_accuracy <= 0)
                 pos_accuracy = 1;
-            //printf("receive covariance %lf \n", pos_accuracy);
-            //if(GPS_msg->status.status > 8)
-                globalEstimator.inputGPS(t, latitude, longitude, altitude, pos_accuracy);
+            // printf("receive covariance %lf \n", pos_accuracy);
+            // if(GPS_msg->status.status > 8)
+            // 输入当前帧里程计对应时刻的GPS数据
+            globalEstimator.inputGPS(t, latitude, longitude, altitude, pos_accuracy);
+
             gpsQueue.pop();
             break;
         }
-        else if(gps_t < t - 0.01)
+        else if (gps_t < t - 0.01)
             gpsQueue.pop();
-        else if(gps_t > t + 0.01)
+        else if (gps_t > t + 0.01)
             break;
     }
     m_buf.unlock();
 
+
+
+    // ===================== 得到优化后的位姿进行输出 ====================
     Eigen::Vector3d global_t;
-    Eigen:: Quaterniond global_q;
+    Eigen::Quaterniond global_q;
     globalEstimator.getGlobalOdom(global_t, global_q);
 
     nav_msgs::Odometry odometry;
@@ -141,20 +157,19 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     pub_global_path.publish(*global_path);
     publish_car_model(t, global_t, global_q);
 
-
-    // write result to file
+    // ===================== write result to file ====================
     std::ofstream foutC("/home/tony-ws1/output/vio_global.csv", ios::app);
     foutC.setf(ios::fixed, ios::floatfield);
     foutC.precision(0);
     foutC << pose_msg->header.stamp.toSec() * 1e9 << ",";
     foutC.precision(5);
     foutC << global_t.x() << ","
-            << global_t.y() << ","
-            << global_t.z() << ","
-            << global_q.w() << ","
-            << global_q.x() << ","
-            << global_q.y() << ","
-            << global_q.z() << endl;
+          << global_t.y() << ","
+          << global_t.z() << ","
+          << global_q.w() << ","
+          << global_q.x() << ","
+          << global_q.y() << ","
+          << global_q.z() << endl;
     foutC.close();
 }
 
@@ -165,11 +180,18 @@ int main(int argc, char **argv)
 
     global_path = &globalEstimator.global_path;
 
+    // 订阅GPS
     ros::Subscriber sub_GPS = n.subscribe("/gps", 100, GPS_callback);
+    // 订阅里程计
     ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 100, vio_callback);
+
+    // 发布轨迹
     pub_global_path = n.advertise<nav_msgs::Path>("global_path", 100);
+    // 发布里程计
     pub_global_odometry = n.advertise<nav_msgs::Odometry>("global_odometry", 100);
+    // 发布小车模型
     pub_car = n.advertise<visualization_msgs::MarkerArray>("car_model", 1000);
+
     ros::spin();
     return 0;
 }

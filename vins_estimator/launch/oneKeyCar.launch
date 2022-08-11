@@ -1,0 +1,27 @@
+<launch>
+
+    <!-- 定义 Euroc配置文件的存储路径-->
+    <arg name="config_path" default = "$(find vins_estimator)/../config/euroc/euroc_stereo_imu_config.yaml" />
+
+    <!-- 启动ROSBAG -->
+    <node pkg="rosbag" type="play" name="play" 
+    args = "/media/divenire/C86BCECE98B60C8B/0_myWorkSpace/Datasets/Euroc/bag/MH_05_difficult.bag"
+    output = "log"  respawn = "false"/>    
+
+
+    <!-- 启动rviz -->
+    <include file = "$(find vins_estimator)/launch/vins_rviz.launch" />
+
+    <!-- 启动benchmark -->
+    <!-- <include file = "$(find benchmark_publisher)/launch/publish.launch" /> -->
+
+
+    <!-- 启动feature_tracker节点 并传入包和配置文件的路径 -->
+    <!-- name:节点名称（ROS拓扑中） -->
+    <!-- pkg 节点所属的包名 -->
+    <!-- type 可执行文件的名称 -->
+    <node name="vins_estimator" pkg="vins_estimator" type="vins_node" output="log" args ="$(arg config_path)">
+    </node>
+
+
+</launch>

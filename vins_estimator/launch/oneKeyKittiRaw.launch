@@ -1,0 +1,30 @@
+<launch>
+
+    <!-- 定义 KITTI配置文件的存储路径-->
+    <arg name="config_path" default = "$(find vins_estimator)/../config/kitti_raw/kitti_10_03_config.yaml" />
+    <!-- 定义 KITTI数据集路径-->
+    <arg name="seq_path" default = "/media/divenire/C86BCECE98B60C8B/0_myWorkSpace/Datasets/KITTI/raw_data/2011_10_03_drive_0027_sync/2011_10_03/2011_10_03_drive_0027_sync/" />
+
+
+
+    <!-- 启动rviz -->
+    <include file = "$(find vins_estimator)/launch/vins_rviz.launch" />
+
+    <!-- 启动benchmark -->
+    <!-- <include file = "$(find benchmark_publisher)/launch/publish.launch" /> -->
+
+
+    <!-- 启动vio节点 并传入包和配置文件的路径 -->
+    <!-- name:节点名称（ROS拓扑中） -->
+    <!-- pkg 节点所属的包名 -->
+    <!-- type 可执行文件的名称 -->
+    <!-- args 传入节点的参数 -->
+    <node name="vins_estimator" pkg="vins_estimator" type="kitti_gps_test" output="log" 
+    args ="$(arg config_path) $(arg seq_path)"></node>
+
+    <!-- 启动回环检测节点 -->
+    <node name="global_fusion" pkg="global_fusion" type="global_fusion_node" output="screen" ></node>
+
+
+
+</launch>
